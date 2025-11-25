@@ -14,17 +14,216 @@ datasource db {
 }
 
 model User {
-  id        String @id @default(auto()) @map("_id") @db.ObjectId
-  firstName String
-  lastName  String
-  email     String   @unique
-  password  String
-  role      Role     @default(EMPLOYEE)
-  createdAt DateTime @default(now())
+  id               String @id @default(auto()) @map("_id") @db.ObjectId
+  firstName        String
+  lastName         String
+  email            String   @unique
+  contact          String?
+  password         String
+  role             Role     @default(EMPLOYEE)
+  avatarUrl        String?
+  isActive         Boolean  @default(false) 
+  createdAt        DateTime @default(now())
+  leaveBalance     LeaveBalance[]
+  notifications    Notification[]
+  leaveRequests    LeaveRequest[] 
+  teamId              String? @db.ObjectId
+  team                Team?          @relation(fields: [teamId], references: [id])
+  evaluationsGiven    Evaluation[]   @relation("ManagerEvaluations")
+  evaluationsReceived Evaluation[]   @relation("EmployeeEvaluations")
+  abscenceGiven       Absence[]      @relation("ManagerAbsence")
+  abscenceReceived    Absence[]      @relation("EmployeeAbsence")
 }
 
 enum Role {
   EMPLOYEE
   MANAGER
   ADMIN
+  SUPERADMIN
+}
+
+//Leave
+
+model LeaveRequest {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  //type       LeaveType
+  startDate  DateTime
+  endDate    DateTime
+  reason     String?
+  document   String?
+  status     LeaveStatus @default(PENDING)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  //relation avec LeavePolicy
+  policyId      String        
+  policy        LeavePolicy   @relation(fields: [policyId], references: [id])
+
+  //relation avec user
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+}
+
+model LeavePolicy {
+  id             String         @id @default(auto()) @map("_id") @db.ObjectId
+  type           String         // Exemple : "Annual", "Sick", ...
+  annualBalance  Int
+  autoApproval   Boolean        @default(false)
+  description    String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  // Relation avec LeaveRequest
+  leaveRequests  LeaveRequest[]
+  leaveBalance   LeaveBalance[]
+}
+
+model LeaveBalance {
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  totalDays   Int          // Solde total annuel défini par la LeavePolicy
+  usedDays    Int          @default(0)
+  remaining   Int          @default(0)
+
+  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime     @default(now())
+
+  policyId    String       
+  policy      LeavePolicy  @relation(fields: [policyId], references: [id])
+
+  userId      String       
+  user        User         @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id          String          @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String
+  user        User            @relation(fields: [userId], references: [id])
+  type        NotificationType
+  message     String
+  read        Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  targetId    String? 
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum LeaveType {
+  SICK
+  VACATION
+  UNPAID
+  OTHER
+}
+
+enum NotificationType {
+  LEAVE_REQUEST        
+  LEAVE_APPROVED
+  LEAVE_REJECTED
+
+  LEAVE_POLICY_UPDATE
+
+  ABSENCE_DECLARED     
+
+  EVALUATION_COMPLETED 
+}
+
+//PERFORMANCE EVALUATION
+
+model Team {
+  id          String      @id @default(auto()) @map("_id") @db.ObjectId
+  name        String      @unique
+  description String?
+  members     User[]
+  criteria    TeamCriteria[]
+  teamCriteriaAverage TeamCriteriaAverage[]
+
+}
+
+model Criteria {
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  name         String       @unique
+  description  String
+
+  teamCriteria TeamCriteria[]
+  scores       Score[]
+  teamCriteriaAverage TeamCriteriaAverage[]
+}
+
+model TeamCriteria {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  teamId     String    @db.ObjectId
+  criteriaId String    @db.ObjectId
+  enabled    Boolean   @default(false)
+
+  team     Team     @relation(fields: [teamId], references: [id])
+  criteria Criteria @relation(fields: [criteriaId], references: [id])
+}
+
+model Evaluation {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  employeeId  String    @db.ObjectId
+  managerId   String    @db.ObjectId
+  month       Int
+  year        Int
+  average     Float?    
+  createdAt   DateTime  @default(now())
+
+  employee    User @relation("EmployeeEvaluations", fields: [employeeId], references: [id])
+  manager     User @relation("ManagerEvaluations", fields: [managerId], references: [id])
+
+  scores    Score[]
+}
+
+model Score {
+  id           String @id @default(auto()) @map("_id") @db.ObjectId
+
+  evaluationId String @db.ObjectId
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id])
+
+  criteriaId   String @db.ObjectId
+  criteria     Criteria @relation(fields: [criteriaId], references: [id])
+
+  score        Int
+}
+
+model TeamCriteriaAverage {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  teamId      String   @db.ObjectId
+  criteriaId  String   @db.ObjectId
+  month       Int
+  year        Int
+  average     Float
+
+  team        Team     @relation(fields: [teamId], references: [id])
+  criteria    Criteria @relation(fields: [criteriaId], references: [id])
+
+  @@unique([teamId, criteriaId, month, year], name: "teamId_criteriaId_month_year")
+}
+
+//ABSENCE
+
+model Absence {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  type        AbsenceType
+  startDate   DateTime
+  endDate     DateTime
+  comment     String?
+
+  employeeId  String   @db.ObjectId
+  managerId   String   @db.ObjectId
+
+  employee    User     @relation("EmployeeAbsence", fields: [employeeId], references: [id])
+  manager     User     @relation("ManagerAbsence", fields: [managerId], references: [id])
+
+  createdAt   DateTime @default(now())
+}
+
+enum AbsenceType {
+  JUSTIFIED
+  UNJUSTIFIED
+  MEDICAL
 }

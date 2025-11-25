@@ -12,6 +12,20 @@ const options = {
     },
   },
   apis: ['./src/routes/*.ts'],
+  components: {
+      securitySchemes:{
+        bearerAuth:{
+          type:"http",
+          scheme:"bearer",
+          bearerFormat: "JWT",
+        },
+      },
+  },
+  security:[
+    {
+      bearerAuth: [],
+    },
+  ],
 };
 
 const swaggerSpec = swaggerJsDoc(options);
